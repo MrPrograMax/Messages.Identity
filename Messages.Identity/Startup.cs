@@ -1,0 +1,82 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using System.Collections.Generic;
+using IdentityServer4.Models;
+using Microsoft.Extensions.Configuration;
+using Messages.Identity.Data;
+using Microsoft.EntityFrameworkCore;
+using Messages.Identity.Models;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.FileProviders;
+using System.IO;
+
+namespace Messages.Identity
+{
+    public class Startup
+    {
+        public IConfiguration AppConfiguration { get; }
+
+        public Startup(IConfiguration configuration) => AppConfiguration = configuration;
+        public void ConfigureServices(IServiceCollection services)
+        {
+            var connectionString = AppConfiguration.GetValue<string>("DbConnection");
+
+            services.AddDbContext<AuthDbContext>(oprions =>
+            {
+                oprions.UseSqlite(connectionString);
+            });
+
+            services.AddIdentity<AppUser, IdentityRole>(config =>
+            {
+                config.Password.RequiredLength = 8;
+                config.Password.RequireDigit = true;
+                config.Password.RequireNonAlphanumeric = true;
+                config.Password.RequireUppercase = true;
+            })
+                .AddEntityFrameworkStores<AuthDbContext>()
+                .AddDefaultTokenProviders();
+
+            services.AddIdentityServer()
+                .AddAspNetIdentity<AppUser>()
+                .AddInMemoryApiResources(Configuration.ApiResources)
+                .AddInMemoryIdentityResources(Configuration.IdentityResources)
+                .AddInMemoryApiScopes(Configuration.ApiScopes)
+                .AddInMemoryClients(Configuration.Clients)
+                .AddDeveloperSigningCredential();
+
+            services.ConfigureApplicationCookie(config =>
+            {
+                config.Cookie.Name = "Messages.Identity.Cookie";
+                config.LoginPath = "/Auth/Login";
+                config.LogoutPath = "/Auth/Logout";
+            });
+
+            services.AddControllersWithViews();
+        }
+
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+        {
+            if (env.IsDevelopment())
+            {
+                app.UseDeveloperExceptionPage();
+            }
+
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(
+                    Path.Combine(env.ContentRootPath, "Styles")),
+                RequestPath = "/styles"
+            });
+            app.UseRouting();
+            app.UseIdentityServer();
+
+            app.UseEndpoints(endpoints =>
+            {
+                endpoints.MapDefaultControllerRoute();
+            });
+        }
+    }
+}
